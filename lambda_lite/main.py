@@ -29,7 +29,7 @@ def get_products(page: int = 1, limit: int = 50):
         offset = (page - 1) * limit
         with engine.connect() as conn:
             query_sql = sa.text(f'''
-                SELECT metadata_
+                SELECT id, metadata_
                 FROM rag.data_supermarket_docs
                 WHERE embedding IS NOT NULL AND (is_enabled IS NULL OR is_enabled = true)
                 ORDER BY id ASC
@@ -39,7 +39,8 @@ def get_products(page: int = 1, limit: int = 50):
             
         products = []
         for i, r in enumerate(results):
-            metadata = r[0] if isinstance(r[0], dict) else json.loads(r[0])
+            db_id = r[0]
+            metadata = r[1] if isinstance(r[1], dict) else json.loads(r[1])
             
             price_val = metadata.get('price')
             if price_val is None:
@@ -74,7 +75,7 @@ def get_products(page: int = 1, limit: int = 50):
             if calc_size <= 0: calc_size = 100.0
             
             products.append({
-                "id": str(i + 1),
+                "id": str(db_id),
                 "name": metadata.get('name', 'Unknown Product'),
                 "price": price,
                 "size": calc_size,
