@@ -143,15 +143,21 @@ def read_root():
     return {"message": "Welcome to Unified Master Architecture SaaS API"}
 
 @app.get("/api/products")
-def get_products(page: int = 1, limit: int = 50):
+def get_products(page: int = 1, limit: int = 50, category: str = None):
     try:
         import json
         offset = (page - 1) * limit
+        
+        where_clause = "WHERE embedding IS NOT NULL AND (is_enabled IS NULL OR is_enabled = true)"
+        if category:
+            safe_cat = category.replace("'", "''")
+            where_clause += f" AND metadata_->>'category_l1' = '{safe_cat}'"
+            
         with engine.connect() as conn:
             query_sql = sa.text(f'''
                 SELECT id, metadata_
                 FROM rag.data_supermarket_docs
-                WHERE embedding IS NOT NULL AND (is_enabled IS NULL OR is_enabled = true)
+                {where_clause}
                 ORDER BY id ASC
                 LIMIT {limit} OFFSET {offset}
             ''')
