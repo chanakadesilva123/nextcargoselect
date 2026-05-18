@@ -23,15 +23,17 @@ def read_root():
     return {"message": "Welcome to Unified Master Architecture SaaS API (Lambda Edition)"}
 
 @app.get("/api/products")
-def get_products():
+def get_products(page: int = 1, limit: int = 50):
     try:
         import json
+        offset = (page - 1) * limit
         with engine.connect() as conn:
-            query_sql = sa.text('''
+            query_sql = sa.text(f'''
                 SELECT metadata_
                 FROM rag.data_supermarket_docs
                 WHERE embedding IS NOT NULL AND (is_enabled IS NULL OR is_enabled = true)
-                LIMIT 100
+                ORDER BY id ASC
+                LIMIT {limit} OFFSET {offset}
             ''')
             results = conn.execute(query_sql).fetchall()
             
