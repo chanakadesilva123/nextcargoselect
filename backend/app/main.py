@@ -225,3 +225,18 @@ def chat(request: ChatRequest):
         return {"response": str(response)}
     except Exception as e:
         return {"response": f"Error during query: {str(e)}"}
+
+@app.get("/api/categories")
+def get_categories():
+    try:
+        with engine.connect() as conn:
+            query_sql = sa.text('''
+                SELECT DISTINCT metadata_->>'category_l1'
+                FROM rag.data_supermarket_docs
+                WHERE metadata_->>'category_l1' IS NOT NULL
+            ''')
+            results = conn.execute(query_sql).fetchall()
+            categories = [r[0] for r in results if r[0]]
+            return sorted(categories)
+    except Exception as e:
+        return {"error": str(e)}
