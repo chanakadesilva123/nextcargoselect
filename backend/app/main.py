@@ -162,19 +162,36 @@ def get_products(page: int = 1, limit: int = 50):
             metadata = r[0] if isinstance(r[0], dict) else json.loads(r[0])
             
             # Extract price as float
-            price_str = metadata.get('price', '$0')
-            if isinstance(price_str, str):
-                price_str = price_str.replace('$', '').strip()
+            price_val = metadata.get('price')
+            if price_val is None:
+                price_val = '$0'
+                
+            if isinstance(price_val, str):
+                price_val = price_val.replace('$', '').strip()
                 try:
-                    price = float(price_str)
+                    price = float(price_val)
                 except ValueError:
                     price = 0.0
             else:
-                price = float(price_str)
+                try:
+                    price = float(price_val)
+                except (ValueError, TypeError):
+                    price = 0.0
                 
             
-            length = float(metadata.get('length', 10))
-            width = float(metadata.get('width', 10))
+            length_val = metadata.get('length')
+            width_val = metadata.get('width')
+            
+            try:
+                length = float(length_val) if length_val is not None else 10.0
+            except (ValueError, TypeError):
+                length = 10.0
+                
+            try:
+                width = float(width_val) if width_val is not None else 10.0
+            except (ValueError, TypeError):
+                width = 10.0
+                
             calc_size = length * width
             if calc_size <= 0: calc_size = 100.0
             
