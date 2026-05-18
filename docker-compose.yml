@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ragdb
+    ports:
+      - "5434:5432"
+    volumes:
+      - ./db_init:/docker-entrypoint-initdb.d
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    volumes:
+      - ./backend:/app
+    environment:
+      DATABASE_URL: "postgresql://postgres:password@db:5432/ragdb"
+
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+  admin_panel:
+    build: ./admin_panel
+    ports:
+      - "3001:3001"
+    depends_on:
+      - db
+    volumes:
+      - ./admin_panel:/app
+      - /app/node_modules
+    environment:
+      - PGHOST=db
+
+volumes:
+  pgdata:

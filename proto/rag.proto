@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package rag;
+option go_package = "./rag_pb";
+
+service ProductService {
+    rpc GetProducts (Empty) returns (ProductList);
+}
+
+message Empty {}
+
+message Product {
+    string id = 1;
+    string name = 2;
+    float price = 3;
+    float size = 4;
+    string image = 5;
+    string shop = 6;
+}
+
+message ProductList {
+    repeated Product products = 1;
+}

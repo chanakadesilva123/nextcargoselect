@@ -1,0 +1,10 @@
+*.sql
+*.log
+*.zip
+protoc_bin/
+chat_test_report.json
+lambda_lite/function.zip
+lambda_lite/output.json
+lambda_lite/payload.json
+lambda_lite/url.json
+__pycache__/
