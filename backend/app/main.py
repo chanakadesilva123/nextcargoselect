@@ -257,6 +257,9 @@ class CheckoutRequest(BaseModel):
     items: list[CheckoutItem]
     success_url: str
     cancel_url: str
+    customer_name: str = None
+    customer_email: str = None
+    customer_phone: str = None
 
 @app.post("/api/checkout")
 def create_checkout_session(request: CheckoutRequest):
@@ -288,7 +291,13 @@ def create_checkout_session(request: CheckoutRequest):
                 VALUES (:session_id, 'cargoselect', 'CargoSelect', :price, 'AUD', 'pending', 'pending', :metadata)
             ''')
             total_price = sum(item.price * item.quantity for item in request.items)
-            metadata = json.dumps([{"name": i.name, "qty": i.quantity, "price": i.price} for i in request.items])
+            metadata_dict = {
+                "items": [{"name": i.name, "qty": i.quantity, "price": i.price} for i in request.items],
+                "customer_name": request.customer_name,
+                "customer_email": request.customer_email,
+                "customer_phone": request.customer_phone
+            }
+            metadata = json.dumps(metadata_dict)
             conn.execute(query, {"session_id": session.id, "price": total_price, "metadata": metadata})
             conn.commit()
             
