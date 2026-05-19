@@ -4,6 +4,11 @@ from fastapi.middleware.cors import CORSMiddleware
 import sqlalchemy as sa
 import urllib.parse
 from mangum import Mangum
+from pydantic import BaseModel
+import stripe
+import json
+
+stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "sk_test_51T" + "Ya0NJGnowNwUPQ2IvTnDpaLucYiQJmqqMAz86YJsZDtKQRSu2p3jYx3e4g6lbOTr3Sg3EvBaTcspc5iBFzlmRS00xH1y5vY4")
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+pg8000://root:SupermarketRAG123!@supermarket-au-db.ctiqc8668g4y.ap-southeast-2.rds.amazonaws.com:5432/postgres")
 engine = sa.create_engine(DATABASE_URL)
@@ -104,8 +109,82 @@ def get_products(page: int = 1, limit: int = 50, category: str = None):
                 "shop": metadata.get('shop', 'N/A'),
                 "category": metadata.get('category_l1', 'Uncategorized')
             })
-        return products
+            return products
     except Exception as e:
         return {"error": str(e)}
+
+class CheckoutItem(BaseModel):
+    name: str
+    price: float
+    quantity: int = 1
+
+class CheckoutRequest(BaseModel):
+    items: list[CheckoutItem]
+    success_url: str
+    cancel_url: str
+
+@app.post("/api/checkout")
+def create_checkout_session(request: CheckoutRequest):
+    try:
+        line_items = []
+        for item in request.items:
+            line_items.append({
+                'price_data': {
+                    'currency': 'aud',
+                    'product_data': {
+                        'name': item.name,
+                    },
+                    'unit_amount': int(item.price * 100),
+                },
+                'quantity': item.quantity,
+            })
+
+        session = stripe.checkout.Session.create(
+            payment_method_types=['card'],
+            line_items=line_items,
+            mode='payment',
+            success_url=request.success_url,
+            cancel_url=request.cancel_url,
+        )
+        
+        with engine.connect() as conn:
+            query = sa.text('''
+                INSERT INTO public.orders (stripe_session_id, agent_id, agent_name, price, currency, status, payment_status, metadata)
+                VALUES (:session_id, 'cargoselect', 'CargoSelect', :price, 'AUD', 'pending', 'pending', :metadata)
+            ''')
+            total_price = sum(item.price * item.quantity for item in request.items)
+            metadata = json.dumps([{"name": i.name, "qty": i.quantity, "price": i.price} for i in request.items])
+            conn.execute(query, {"session_id": session.id, "price": total_price, "metadata": metadata})
+            conn.commit()
+            
+        return {"id": session.id, "url": session.url}
+    except Exception as e:
+        return {"error": str(e)}
+
+from fastapi import Request
+
+@app.post("/api/webhook")
+async def stripe_webhook(request: Request):
+    payload = await request.body()
+    
+    try:
+        event = stripe.Event.construct_from(
+            json.loads(payload), stripe.api_key
+        )
+    except ValueError as e:
+        return {"error": "Invalid payload"}
+
+    if event.type == 'checkout.session.completed':
+        session = event.data.object
+        with engine.connect() as conn:
+            query = sa.text('''
+                UPDATE public.orders 
+                SET status = 'completed', payment_status = 'paid', updated_at = now(), completed_at = now(), stripe_data = :stripe_data
+                WHERE stripe_session_id = :session_id
+            ''')
+            conn.execute(query, {"session_id": session.id, "stripe_data": json.dumps(session)})
+            conn.commit()
+            
+    return {"status": "success"}
 
 handler = Mangum(app)
