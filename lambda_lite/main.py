@@ -165,6 +165,18 @@ def create_checkout_session(request: CheckoutRequest):
 
 from fastapi import Request
 
+@app.get("/api/orders/{session_id}")
+def get_order_by_session(session_id: str):
+    try:
+        with engine.connect() as conn:
+            query = sa.text('SELECT id, status, payment_status, price FROM public.orders WHERE stripe_session_id = :session_id LIMIT 1')
+            result = conn.execute(query, {"session_id": session_id}).fetchone()
+            if result:
+                return {"id": result[0], "status": result[1], "payment_status": result[2], "price": float(result[3])}
+            return {"error": "Order not found"}
+    except Exception as e:
+        return {"error": str(e)}
+
 @app.post("/api/webhook")
 async def stripe_webhook(request: Request):
     payload = await request.body()
