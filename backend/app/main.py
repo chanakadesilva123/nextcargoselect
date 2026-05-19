@@ -5,6 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import stripe
 import json
+import random
+from datetime import datetime, timedelta
 
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "sk_test_51T" + "Ya0NJGnowNwUPQ2IvTnDpaLucYiQJmqqMAz86YJsZDtKQRSu2p3jYx3e4g6lbOTr3Sg3EvBaTcspc5iBFzlmRS00xH1y5vY4")
 
@@ -319,4 +321,70 @@ async def stripe_webhook(request: Request):
             conn.commit()
             
     return {"status": "success"}
+
+class SendOtpRequest(BaseModel):
+    identifier: str
+
+class VerifyOtpRequest(BaseModel):
+    identifier: str
+    code: str
+
+@app.post("/api/auth/send-otp")
+def send_otp(request: SendOtpRequest):
+    try:
+        otp = str(random.randint(100000, 999999))
+        expires_at = datetime.utcnow() + timedelta(minutes=10)
+        
+        with engine.connect() as conn:
+            query = sa.text('''
+                INSERT INTO public.otp_codes (identifier, code, expires_at)
+                VALUES (:identifier, :code, :expires_at)
+            ''')
+            conn.execute(query, {"identifier": request.identifier, "code": otp, "expires_at": expires_at})
+            conn.commit()
+            
+        # In a production app, we would integrate Twilio or AWS SNS to send this code to the user's phone
+        # or SES to email. For this demonstration, we'll return the OTP so the frontend can mock it or we can test it.
+        return {"status": "success", "message": "OTP sent successfully.", "mock_otp": otp}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/api/auth/verify-otp")
+def verify_otp(request: VerifyOtpRequest):
+    try:
+        with engine.connect() as conn:
+            query = sa.text('''
+                SELECT id FROM public.otp_codes 
+                WHERE identifier = :identifier AND code = :code AND expires_at > NOW()
+                ORDER BY created_at DESC LIMIT 1
+            ''')
+            result = conn.execute(query, {"identifier": request.identifier, "code": request.code}).fetchone()
+            
+            if result:
+                user_query = sa.text("SELECT id, name, email FROM public.users WHERE email = :identifier OR phone_number = :identifier LIMIT 1")
+                user = conn.execute(user_query, {"identifier": request.identifier}).fetchone()
+                
+                if not user:
+                    insert_user = sa.text('''
+                        INSERT INTO public.users (name, email, password_hash)
+                        VALUES (:name, :email, 'otp_login') RETURNING id, name, email
+                    ''')
+                    name = request.identifier.split('@')[0]
+                    email = request.identifier if '@' in request.identifier else f"{request.identifier}@example.com"
+                    user = conn.execute(insert_user, {"name": name, "email": email}).fetchone()
+                    conn.commit()
+                
+                del_query = sa.text("DELETE FROM public.otp_codes WHERE identifier = :identifier")
+                conn.execute(del_query, {"identifier": request.identifier})
+                conn.commit()
+                
+                return {
+                    "status": "success", 
+                    "user": {"id": user[0], "name": user[1], "email": user[2]}
+                }
+            else:
+                return {"error": "Invalid or expired OTP."}
+    except Exception as e:
+        return {"error": str(e)}
+
 
