@@ -111,7 +111,7 @@ def get_products(page: int = 1, limit: int = 50, category: str = None):
                 "shop": metadata.get('shop', 'N/A'),
                 "category": metadata.get('category_l1', 'Uncategorized')
             })
-            return products
+        return products
     except Exception as e:
         return {"error": str(e)}
 
