@@ -45,13 +45,16 @@ def get_categories():
         return {"error": str(e)}
 
 @app.get("/api/products")
-def get_products(page: int = 1, limit: int = 50, category: str = None):
+def get_products(page: int = 1, limit: int = 50, category: str = None, all_products: bool = False):
     try:
         import json
         offset = (page - 1) * limit
         
-        where_clause = "WHERE embedding IS NOT NULL AND (is_enabled IS NULL OR is_enabled = true)"
-        if category:
+        where_clause = "WHERE embedding IS NOT NULL"
+        if not all_products:
+            where_clause += " AND (is_enabled IS NULL OR is_enabled = true)"
+            
+        if category and category != 'All':
             safe_cat = category.replace("'", "''")
             where_clause += f" AND metadata_->>'category_l1' = '{safe_cat}'"
             
@@ -214,6 +217,51 @@ def update_route(type: str, id: int, req: RouteUpdate):
     except Exception as e:
         return {"error": str(e)}
 
+@app.get("/api/admin/orders")
+def get_admin_orders():
+    try:
+        with engine.connect() as conn:
+            query = sa.text('SELECT id, stripe_session_id, price, currency, status, payment_status, created_at, metadata FROM public.orders ORDER BY created_at DESC LIMIT 100')
+            results = conn.execute(query).fetchall()
+            orders = []
+            for r in results:
+                if r[7] is None:
+                    meta = {}
+                elif isinstance(r[7], (dict, list)):
+                    meta = r[7]
+                else:
+                    try:
+                        meta = json.loads(r[7])
+                    except:
+                        meta = {}
+                        
+                orders.append({
+                    "id": r[0],
+                    "stripe_session_id": r[1],
+                    "price": float(r[2]) if r[2] is not None else 0.0,
+                    "currency": r[3],
+                    "status": r[4],
+                    "payment_status": r[5],
+                    "created_at": r[6].isoformat() if r[6] else None,
+                    "metadata": meta
+                })
+            return orders
+    except Exception as e:
+        return {"error": str(e)}
+
+class OrderUpdate(BaseModel):
+    status: str
+
+@app.put("/api/admin/orders/{id}")
+def update_order_status(id: int, req: OrderUpdate):
+    try:
+        with engine.connect() as conn:
+            query = sa.text('UPDATE public.orders SET status = :status WHERE id = :id')
+            conn.execute(query, {"status": req.status, "id": id})
+            conn.commit()
+            return {"success": True}
+    except Exception as e:
+        return {"error": str(e)}
 
 class CheckoutItem(BaseModel):
     name: str
