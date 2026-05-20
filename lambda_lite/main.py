@@ -57,7 +57,7 @@ def get_products(page: int = 1, limit: int = 50, category: str = None):
             
         with engine.connect() as conn:
             query_sql = sa.text(f'''
-                SELECT id, metadata_
+                SELECT id, metadata_, is_enabled
                 FROM rag.data_supermarket_docs
                 {where_clause}
                 ORDER BY id ASC
@@ -109,7 +109,11 @@ def get_products(page: int = 1, limit: int = 50, category: str = None):
                 "size": calc_size,
                 "image": metadata.get('image_url', '/file.svg'),
                 "shop": metadata.get('shop', 'N/A'),
-                "category": metadata.get('category_l1', 'Uncategorized')
+                "category": metadata.get('category_l1', 'Uncategorized'),
+                "is_enabled": r[2] if len(r) > 2 and r[2] is not None else True,
+                "length": metadata.get('length', 0),
+                "width": metadata.get('width', 0),
+                "height": metadata.get('height', 0)
             })
         return products
     except Exception as e:
@@ -152,6 +156,64 @@ def get_routes():
             return {"origins": origins, "destinations": destinations}
     except Exception as e:
         return {"error": str(e)}
+
+class ProductUpdate(BaseModel):
+    is_enabled: bool
+    length: float = 0
+    width: float = 0
+    height: float = 0
+
+@app.put("/api/products/{id}")
+def update_product(id: int, req: ProductUpdate):
+    try:
+        with engine.connect() as conn:
+            query = sa.text('SELECT metadata_ FROM rag.data_supermarket_docs WHERE id = :id')
+            result = conn.execute(query, {"id": id}).fetchone()
+            if not result:
+                return {"error": "Product not found"}
+            
+            metadata = result[0] if isinstance(result[0], dict) else json.loads(result[0])
+            metadata['length'] = req.length
+            metadata['width'] = req.width
+            metadata['height'] = req.height
+            
+            update_query = sa.text('UPDATE rag.data_supermarket_docs SET is_enabled = :enabled, metadata_ = :meta WHERE id = :id')
+            conn.execute(update_query, {"enabled": req.is_enabled, "meta": json.dumps(metadata), "id": id})
+            conn.commit()
+            return {"success": True}
+    except Exception as e:
+        return {"error": str(e)}
+
+class BoxUpdate(BaseModel):
+    is_enabled: bool
+    price: float
+
+@app.put("/api/boxes/{id}")
+def update_box(id: int, req: BoxUpdate):
+    try:
+        with engine.connect() as conn:
+            query = sa.text('UPDATE rag.shipping_boxes SET is_enabled = :enabled, price = :price WHERE id = :id')
+            conn.execute(query, {"enabled": req.is_enabled, "price": req.price, "id": id})
+            conn.commit()
+            return {"success": True}
+    except Exception as e:
+        return {"error": str(e)}
+
+class RouteUpdate(BaseModel):
+    is_enabled: bool
+
+@app.put("/api/routes/{type}/{id}")
+def update_route(type: str, id: int, req: RouteUpdate):
+    try:
+        table = "rag.shipping_route_origins" if type == "origins" else "rag.shipping_route_destinations"
+        with engine.connect() as conn:
+            query = sa.text(f'UPDATE {table} SET is_enabled = :enabled WHERE id = :id')
+            conn.execute(query, {"enabled": req.is_enabled, "id": id})
+            conn.commit()
+            return {"success": True}
+    except Exception as e:
+        return {"error": str(e)}
+
 
 class CheckoutItem(BaseModel):
     name: str
