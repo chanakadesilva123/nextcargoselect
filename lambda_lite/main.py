@@ -115,6 +115,44 @@ def get_products(page: int = 1, limit: int = 50, category: str = None):
     except Exception as e:
         return {"error": str(e)}
 
+@app.get("/api/boxes")
+def get_boxes():
+    try:
+        with engine.connect() as conn:
+            query_sql = sa.text('SELECT * FROM rag.shipping_boxes WHERE is_enabled = true ORDER BY id ASC')
+            results = conn.execute(query_sql).fetchall()
+            boxes = []
+            for r in results:
+                boxes.append({
+                    "id": r[0],
+                    "name": r[1],
+                    "price": float(r[2]),
+                    "length_cm": r[3],
+                    "width_cm": r[4],
+                    "height_cm": r[5],
+                    "is_enabled": r[6]
+                })
+            return boxes
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/api/routes")
+def get_routes():
+    try:
+        with engine.connect() as conn:
+            orig_sql = sa.text('SELECT * FROM rag.shipping_route_origins WHERE is_enabled = true ORDER BY id ASC')
+            dest_sql = sa.text('SELECT * FROM rag.shipping_route_destinations WHERE is_enabled = true ORDER BY id ASC')
+            
+            orig_results = conn.execute(orig_sql).fetchall()
+            dest_results = conn.execute(dest_sql).fetchall()
+            
+            origins = [{"id": r[0], "label": r[1], "code": r[2], "port": r[3], "is_enabled": r[4]} for r in orig_results]
+            destinations = [{"id": r[0], "label": r[1], "code": r[2], "port": r[3], "is_enabled": r[4]} for r in dest_results]
+            
+            return {"origins": origins, "destinations": destinations}
+    except Exception as e:
+        return {"error": str(e)}
+
 class CheckoutItem(BaseModel):
     name: str
     price: float
