@@ -157,6 +157,7 @@ class CheckoutItem(BaseModel):
     name: str
     price: float
     quantity: int = 1
+    shop: str = None
 
 class CheckoutRequest(BaseModel):
     items: list[CheckoutItem]
@@ -165,6 +166,9 @@ class CheckoutRequest(BaseModel):
     customer_name: str = None
     customer_email: str = None
     customer_phone: str = None
+    box_id: str = None
+    origin_id: str = None
+    destination_id: str = None
 
 @app.post("/api/checkout")
 def create_checkout_session(request: CheckoutRequest):
@@ -201,10 +205,13 @@ def create_checkout_session(request: CheckoutRequest):
             ''')
             total_price = sum(item.price * item.quantity for item in request.items)
             metadata_dict = {
-                "items": [{"name": i.name, "qty": i.quantity, "price": i.price} for i in request.items],
+                "items": [{"name": i.name, "qty": i.quantity, "price": i.price, "shop": i.shop} for i in request.items],
                 "customer_name": request.customer_name,
                 "customer_email": request.customer_email,
-                "customer_phone": request.customer_phone
+                "customer_phone": request.customer_phone,
+                "box_id": request.box_id,
+                "origin_id": request.origin_id,
+                "destination_id": request.destination_id
             }
             metadata = json.dumps(metadata_dict)
             conn.execute(query, {"session_id": session.id, "price": total_price, "metadata": metadata})
